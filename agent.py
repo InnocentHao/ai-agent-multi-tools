@@ -1,6 +1,6 @@
 '''
 Date         : 2026-08-15 17:29:17
-LastEditTime : 2026-08-16 14:41:27
+LastEditTime : 2026-08-16 14:54:45
 '''
 '''
 AI Agent - 多工具智能助手
@@ -20,6 +20,8 @@ from tools.web_scraper import fetch_webpage
 from tools.execute_python import execute_python
 from tools.paper_tool import search_papers
 from tools.paper_manager import download_paper, search_local_papers, list_all_papers
+from tools.pdf_reader import read_pdf, get_pdf_metadata
+from tools.paper_summarizer import read_paper_content, summarize_paper
 
 load_dotenv()
 
@@ -269,6 +271,82 @@ tools = [
             }
         }
     },
+        {
+        "type": "function",
+        "function": {
+            "name": "read_pdf",
+            "description": "读取已下载的PDF论文内容，查看论文具体内容时使用",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "PDF文件路径或文件名（如 'paper_20260816_144159.pdf'）"
+                    },
+                    "max_pages": {
+                        "type": "integer",
+                        "description": "要读取的页数，默认5页"
+                    }
+                },
+                "required": ["filepath"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_pdf_metadata",
+            "description": "获取PDF文件的元数据（标题、作者、创建日期等）",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "PDF文件路径或文件名"
+                    }
+                },
+                "required": ["filepath"]
+            }
+        }
+    },
+        {
+        "type": "function",
+        "function": {
+            "name": "read_paper_content",
+            "description": "读取已下载论文的内容，返回前10页文本，用于查看论文具体内容",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "PDF文件路径或文件名（如 'paper_20260816_144159.pdf'）"
+                    },
+                    "max_pages": {
+                        "type": "integer",
+                        "description": "要读取的页数，默认10页"
+                    }
+                },
+                "required": ["filepath"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "summarize_paper",
+            "description": "对已下载的论文生成结构化中文总结，包括标题、作者、背景、方法、实验、贡献等",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "PDF文件路径或文件名（如 'paper_20260816_144159.pdf'）"
+                    }
+                },
+                "required": ["filepath"]
+            }
+        }
+    },
 ]
 
 # 工具函数映射表
@@ -283,7 +361,11 @@ tool_functions = {
     "search_papers": search_papers,
     "download_paper": download_paper,
     "search_local_papers": search_local_papers,
-    "list_all_papers": list_all_papers
+    "list_all_papers": list_all_papers,
+    "read_pdf": read_pdf,
+    "get_pdf_metadata": get_pdf_metadata,
+    "read_paper_content": read_paper_content,
+    "summarize_paper": summarize_paper
 }
 
 # 工具执行日志前缀
@@ -293,8 +375,16 @@ tool_emojis = {
     "calculator": "🧮 计算",
     "write_to_file": "📝 保存文件",
     "read_file": "📖 读取文件",
-    "fetch_webpage": "🌐 抓取网页",      # ✅ 新增
-    "execute_python": "⚡ 执行代码"      # ✅ 新增
+    "fetch_webpage": "🌐 抓取网页",
+    "execute_python": "⚡ 执行代码",
+    "search_papers": "📚 论文搜索",
+    "download_paper": "📥 下载论文",
+    "search_local_papers": "🔍 本地检索",
+    "list_all_papers": "📋 列出论文",
+    "read_pdf": "📖 阅读PDF",
+    "get_pdf_metadata": "📋 PDF元数据",
+    "read_paper_content": "📄 读论文内容",
+    "summarize_paper": "📊 生成总结"
 }
 
 # ========== Agent主循环 ==========
@@ -313,11 +403,17 @@ def run_agent():
 9. download_paper - 下载论文PDF到本地
 10. search_local_papers - 在本地知识库中搜索已下载论文
 11. list_all_papers - 列出本地所有已下载论文
+12. read_pdf - 读取PDF内容（前5页）
+13. get_pdf_metadata - 获取PDF元数据（标题、作者等）
+14. read_paper_content - 读取论文内容（前10页）
+15. summarize_paper - 对已下载论文生成结构化中文总结
 
-请根据用户的问题，选择合适的工具来帮助回答。"""}]
+请根据用户的问题，选择合适的工具来帮助回答。如果不需要工具，可以直接回答。
+调用工具后，请基于工具返回的结果来回答用户。"""}
+]
     
     print("🤖 AI Agent 已启动（支持多轮对话，输入 'exit' 退出）")
-    print("📋 可用工具：搜索 🔍 | 时间 🕐 | 计算 🧮 | 保存 📝 | 读取 📖 | 抓取网页 🌐 | 执行代码 ⚡ | 论文搜索 📚 | 下载论文 📥 | 本地检索 🔍")
+    print("📋 可用工具：搜索 🔍 | 时间 🕐 | 计算 🧮 | 保存 📝 | 读取 📖 | 抓取网页 🌐 | 执行代码 ⚡ | 论文搜索 📚 | 下载论文 📥 | 本地检索 🔍 | 阅读PDF 📖 | 读论文内容 📄 | 生成总结 📊")
     while True:
         user_input = input("👤 你: ")
         if user_input.lower() in ['exit', 'quit', '退出']:
@@ -387,6 +483,24 @@ def run_agent():
                     elif function_name == "list_all_papers":
                         result = list_all_papers()
                         print("[📚 列出本地论文]")    
+                    elif function_name == "read_pdf":
+                        filepath = args.get("filepath", "")
+                        max_pages = args.get("max_pages", 5)
+                        result = read_pdf(filepath, max_pages)
+                        print(f"[📖 读取PDF] {filepath} (前{max_pages}页)")
+                    elif function_name == "get_pdf_metadata":
+                        filepath = args.get("filepath", "")
+                        result = get_pdf_metadata(filepath)
+                        print(f"[📋 PDF元数据] {filepath}")
+                    elif function_name == "read_paper_content":
+                        filepath = args.get("filepath", "")
+                        max_pages = args.get("max_pages", 10)
+                        result = read_paper_content(filepath, max_pages)
+                        print(f"[📖 读取论文内容] {filepath} (前{max_pages}页)")
+                    elif function_name == "summarize_paper":
+                        filepath = args.get("filepath", "")
+                        result = summarize_paper(filepath, openai_client)  # ✅ 传入 openai_client
+                        print(f"[📊 生成总结] {filepath}")
                     else:
                         result = f"未知工具: {function_name}"
                 else:
