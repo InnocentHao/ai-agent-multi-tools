@@ -1,6 +1,6 @@
 '''
 Date         : 2026-08-15 17:29:17
-LastEditTime : 2026-08-16 14:22:25
+LastEditTime : 2026-08-16 14:41:27
 '''
 '''
 AI Agent - 多工具智能助手
@@ -19,6 +19,7 @@ from tools.file_tool import write_to_file, read_file
 from tools.web_scraper import fetch_webpage      
 from tools.execute_python import execute_python
 from tools.paper_tool import search_papers
+from tools.paper_manager import download_paper, search_local_papers, list_all_papers
 
 load_dotenv()
 
@@ -226,6 +227,48 @@ tools = [
             }
         }
     },
+        {
+        "type": "function",
+        "function": {
+            "name": "download_paper",
+            "description": "下载论文PDF到本地，需要提供PDF链接，可选标题",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "论文标题（可选）"},
+                    "pdf_url": {"type": "string", "description": "PDF下载链接"},
+                    "filename": {"type": "string", "description": "自定义文件名（可选）"}
+                },
+                "required": ["pdf_url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_local_papers",
+            "description": "在本地知识库中搜索已下载的论文",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {"type": "string", "description": "搜索关键词"}
+                },
+                "required": ["keyword"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_all_papers",
+            "description": "列出本地知识库中所有已下载的论文",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
 ]
 
 # 工具函数映射表
@@ -235,9 +278,12 @@ tool_functions = {
     "calculator": calculator,
     "write_to_file": write_to_file,
     "read_file": read_file,
-    "fetch_webpage": fetch_webpage,      # ✅ 新增
+    "fetch_webpage": fetch_webpage,
     "execute_python": execute_python,
-    "search_papers": search_papers      # ✅ 新增
+    "search_papers": search_papers,
+    "download_paper": download_paper,
+    "search_local_papers": search_local_papers,
+    "list_all_papers": list_all_papers
 }
 
 # 工具执行日志前缀
@@ -264,13 +310,14 @@ def run_agent():
 6. fetch_webpage - 抓取指定网页内容
 7. execute_python - 执行Python代码
 8. search_papers - 在arXiv上搜索学术论文
+9. download_paper - 下载论文PDF到本地
+10. search_local_papers - 在本地知识库中搜索已下载论文
+11. list_all_papers - 列出本地所有已下载论文
 
-请根据用户的问题，选择合适的工具来帮助回答。如果不需要工具，可以直接回答。
-调用工具后，请基于工具返回的结果来回答用户。"""}
-]
+请根据用户的问题，选择合适的工具来帮助回答。"""}]
     
     print("🤖 AI Agent 已启动（支持多轮对话，输入 'exit' 退出）")
-    print("📋 可用工具：搜索 🔍 | 时间 🕐 | 计算 🧮 | 保存 📝 | 读取 📖 | 抓取网页 🌐 | 执行代码 ⚡ | 论文搜索 📚")
+    print("📋 可用工具：搜索 🔍 | 时间 🕐 | 计算 🧮 | 保存 📝 | 读取 📖 | 抓取网页 🌐 | 执行代码 ⚡ | 论文搜索 📚 | 下载论文 📥 | 本地检索 🔍")
     while True:
         user_input = input("👤 你: ")
         if user_input.lower() in ['exit', 'quit', '退出']:
@@ -327,7 +374,19 @@ def run_agent():
                         query = args.get("query", "")
                         max_results = args.get("max_results", 5)
                         result = search_papers(query, max_results)
-                        print(f"[📚 论文搜索] 关键词: {query}")    
+                        print(f"[📚 论文搜索] 关键词: {query}")
+                    elif function_name == "download_paper":
+                        title = args.get("title", "")
+                        pdf_url = args.get("pdf_url", "")
+                        filename = args.get("filename", "")
+                        result = download_paper(title, pdf_url, filename)
+                        print(f"[📥 下载论文] {filename or title or pdf_url[:50]}")
+                    elif function_name == "search_local_papers":
+                        result = search_local_papers(args["keyword"])
+                        print(f"[🔍 本地检索] 关键词: {args['keyword']}")
+                    elif function_name == "list_all_papers":
+                        result = list_all_papers()
+                        print("[📚 列出本地论文]")    
                     else:
                         result = f"未知工具: {function_name}"
                 else:
