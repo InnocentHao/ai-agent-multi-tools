@@ -1,6 +1,6 @@
 '''
 Date         : 2026-08-15 17:29:17
-LastEditTime : 2026-08-16 14:54:45
+LastEditTime : 2026-08-16 15:20:16
 '''
 '''
 AI Agent - 多工具智能助手
@@ -10,6 +10,8 @@ import os
 import json
 from openai import OpenAI
 from dotenv import load_dotenv
+
+os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 # 导入所有工具
 from tools.search_tool import search
@@ -22,6 +24,7 @@ from tools.paper_tool import search_papers
 from tools.paper_manager import download_paper, search_local_papers, list_all_papers
 from tools.pdf_reader import read_pdf, get_pdf_metadata
 from tools.paper_summarizer import read_paper_content, summarize_paper
+from tools.rag_tool import index_paper, ask_paper, get_paper_status
 
 load_dotenv()
 
@@ -347,6 +350,52 @@ tools = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "index_paper",
+            "description": "将论文PDF分块并存入向量数据库，索引后才能进行RAG问答",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string",
+                        "description": "PDF文件名（如 'paper_20260816_144159.pdf'）或完整路径"
+                    }
+                },
+                "required": ["filepath"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ask_paper",
+            "description": "基于已索引的论文回答具体问题，如'这篇论文用了什么方法？'",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "关于论文的具体问题"},
+                    "filepath": {"type": "string", "description": "指定论文文件（可选，不指定则搜索所有已索引论文）"},
+                    "top_k": {"type": "integer", "description": "检索片段数量，默认5"}
+                },
+                "required": ["question"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_paper_status",
+            "description": "查看向量数据库状态，了解已索引哪些论文",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+
 ]
 
 # 工具函数映射表
@@ -365,7 +414,10 @@ tool_functions = {
     "read_pdf": read_pdf,
     "get_pdf_metadata": get_pdf_metadata,
     "read_paper_content": read_paper_content,
-    "summarize_paper": summarize_paper
+    "summarize_paper": summarize_paper,
+    "index_paper": index_paper,
+    "ask_paper": ask_paper,
+    "get_paper_status": get_paper_status
 }
 
 # 工具执行日志前缀
@@ -392,6 +444,7 @@ tool_emojis = {
 def run_agent():
     messages = [
     {"role": "system", "content": """你是一个智能助理，拥有以下能力：
+
 1. search - 联网搜索实时信息
 2. get_current_time - 获取当前时间
 3. calculator - 执行数学计算
@@ -407,9 +460,15 @@ def run_agent():
 13. get_pdf_metadata - 获取PDF元数据（标题、作者等）
 14. read_paper_content - 读取论文内容（前10页）
 15. summarize_paper - 对已下载论文生成结构化中文总结
+16. index_paper - 将论文分块存入向量数据库（索引后才能进行RAG问答）
+17. ask_paper - 基于已索引的论文回答具体问题（如"这篇论文用了什么方法？"）
 
-请根据用户的问题，选择合适的工具来帮助回答。如果不需要工具，可以直接回答。
-调用工具后，请基于工具返回的结果来回答用户。"""}
+**重要使用规则：**
+- 当用户询问关于论文的具体细节问题（如"这篇论文用了什么方法？"、"实验结果如何？"、"作者提出了什么架构？"）时，**必须使用 ask_paper 工具**，而不是 read_paper_content。
+- 使用 ask_paper 前，如果该论文尚未索引，先调用 index_paper。
+- read_paper_content 只用于用户明确要求"读取"或"查看"论文内容时使用。
+
+请根据用户的问题，选择合适的工具来帮助回答。"""}
 ]
     
     print("🤖 AI Agent 已启动（支持多轮对话，输入 'exit' 退出）")
@@ -501,6 +560,19 @@ def run_agent():
                         filepath = args.get("filepath", "")
                         result = summarize_paper(filepath, openai_client)  # ✅ 传入 openai_client
                         print(f"[📊 生成总结] {filepath}")
+                    elif function_name == "index_paper":
+                        filepath = args.get("filepath", "")
+                        result = index_paper(filepath)
+                        print(f"[📚 索引论文] {filepath}")
+                    elif function_name == "ask_paper":
+                        question = args.get("question", "")
+                        filepath = args.get("filepath", None)
+                        top_k = args.get("top_k", 5)
+                        result = ask_paper(question, openai_client, filepath, top_k)
+                        print(f"[💬 RAG问答] {question[:50]}...")
+                    elif function_name == "get_paper_status":
+                        result = get_paper_status()
+                        print("[📊 数据库状态]")
                     else:
                         result = f"未知工具: {function_name}"
                 else:
